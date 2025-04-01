@@ -465,38 +465,44 @@ def two_component_primary_mass_ratio_NF(
     prob = eval_likelihood_inference(model, np.atleast_3d([dataset["mass_1"].flatten(), dataset["mass_ratio"].flatten()]).T, np.repeat([[alpha, Z]], len(dataset["mass_1"].flatten()), axis = 0))
     return prob.reshape(dataset["mass_1"].shape)
     
-def two_component_primary_mass_ratio_NF_try(
-    dataset, alpha, Z,
-):
-    import numpy as np
-    from figaro.transform import transform_to_probit
+def two_component_primary_mass_ratio_NF_try(dataset, alpha, Z):
+    # Define parameter bounds
+    bounds = {
+        "mass_1": [0.0, 100.0],
+        "mass_ratio": [0.0, 1.0]
+    }
+
+    # Get the shape of the mass_1 array
+    original_shape = dataset["mass_1"].shape
     
-    # Define bounds for mass_1 and mass_ratio
-    bounds = np.array([[0.0, 100.0], [0.0, 1.0]])  # Adjust bounds as needed
+    # Flatten both arrays
+    mass_1_flat = dataset["mass_1"].flatten()
+    mass_ratio_flat = dataset["mass_ratio"].flatten()
     
-    # Flatten data and stack into the right format for transformation
-    flattened_data = np.column_stack([
-        dataset["mass_1"].flatten(),
-        dataset["mass_ratio"].flatten()
-    ])
+    # Stack them together for transformation
+    data_array = np.column_stack([mass_1_flat, mass_ratio_flat])
     
     # Apply probit transformation
-    transformed_data = transform_to_probit(flattened_data, bounds)
+    bounds_array = np.array([[bounds["mass_1"][0], bounds["mass_1"][1]], 
+                            [bounds["mass_ratio"][0], bounds["mass_ratio"][1]]])
+                            
+    transformed_data = transform_to_probit(data_array, bounds_array)
     
-    # Reshape back to original format
-    transformed_dataset = {
-        "mass_1": transformed_data[:, 0].reshape(dataset["mass_1"].shape),
-        "mass_ratio": transformed_data[:, 1].reshape(dataset["mass_ratio"].shape)
-    }
+    # Reshape for the model - this needs to be (1, N, 2) for the model
+    transformed_samples = transformed_data.reshape(1, -1, 2)
     
-    # Flatten and prepare for model evaluation
+    # Create population parameters array to match transformed data
+    pop_params = np.tile([alpha, Z], (transformed_samples.shape[1], 1))
+    
+    # Evaluate the model
     prob = eval_likelihood_inference(
         model, 
-        np.atleast_3d([transformed_dataset["mass_1"].flatten(), transformed_dataset["mass_ratio"].flatten()]).T, 
-        np.repeat([[alpha, Z]], len(transformed_dataset["mass_1"].flatten()), axis=0)
+        transformed_samples, 
+        np.expand_dims(pop_params, axis=0)  # Make it (1, N, 2) to match samples
     )
     
-    return prob.reshape(dataset["mass_1"].shape)
+    # Reshape the result back to original shape
+    return prob.reshape(original_shape)
 
 
 def two_component_primary_secondary_independent(
